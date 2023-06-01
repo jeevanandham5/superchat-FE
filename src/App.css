@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Pacifico&display=swap");
 .App {
   width: 100vw;
   height: 100vh;
@@ -13,6 +14,15 @@ body {
 }
 @import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,700");
 
+.headtext {
+  display: inline;
+  font-family: "Pacifico", cursive;
+  color: rgb(0, 255, 242);
+  font-size: 40px;
+  position: absolute;
+  -webkit-text-stroke-color: rgb(0, 0, 0);
+  -webkit-text-stroke-width: 2px;
+}
 .joinChatContainer {
   display: flex;
   flex-direction: column;
@@ -52,7 +62,11 @@ body {
 
 .chat-window {
   width: 300px;
-  height: 420px;
+  height: 425px;
+  background-image: url("/public/bg2.jpg");
+  padding: 1;
+  border: 2px solid black;
+  border-radius: 15px;
 }
 
 .chat-window p {
@@ -75,8 +89,6 @@ body {
 
 .chat-window .chat-body {
   height: calc(450px - (45px + 70px));
-  border: 1px solid #263238;
-  background: #fff;
 
   position: relative;
 }
@@ -101,9 +113,9 @@ body {
   height: auto;
   min-height: 40px;
   max-width: 120px;
-  background-color: #43a047;
+  background: #fcfcfc;
   border-radius: 5px;
-  color: white;
+
   display: flex;
   align-items: center;
   margin-right: 5px;
@@ -133,7 +145,7 @@ body {
 
 #other .message-content {
   justify-content: flex-end;
-  background-color: cornflowerblue;
+  background: #d7fad1;
 }
 
 #other .message-meta {
@@ -153,8 +165,8 @@ body {
 
 .chat-window .chat-footer {
   height: 40px;
-  border: 1px solid #263238;
-  border-top: none;
+  margin-bottom: 5px;
+
   display: flex;
 }
 
@@ -164,7 +176,8 @@ body {
   border: 0;
   padding: 0 0.7em;
   font-size: 1em;
-  border-right: 1px dotted #607d8b;
+  border: 1px dotted #607d8b;
+  border-radius: 15px;
 
   outline: none;
   font-family: "Open Sans", sans-serif;
@@ -182,7 +195,11 @@ body {
   font-size: 25px;
   color: lightgray;
 }
-
+.chat-window .chat-footer button {
+  color: #717f86;
+  rotate: 45deg;
+  transition: 0.5s;
+}
 .chat-window .chat-footer button:hover {
   color: #43a047;
 }
