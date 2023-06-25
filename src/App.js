@@ -20,6 +20,7 @@ function App() {
     <div className="App">
       {!showChat ? (
         <div className="joinChatContainer">
+          <h3 className="headtext">superchat</h3>
           <div className="d-flex  ">
             <svg
               xmlns="http://www.w3.org/2000/svg"
