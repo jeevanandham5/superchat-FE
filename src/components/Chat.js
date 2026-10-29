@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "./Avatar";
 import Composer from "./Composer";
+import CallScreen, { IncomingCall } from "./CallScreen";
+import useCall from "./useCall";
 import MessageBubble, { formatBytes } from "./MessageBubble";
 import {
   ArrowLeftIcon,
@@ -10,6 +12,8 @@ import {
   LinkIcon,
   LogOutIcon,
   LogoMark,
+  PhoneIcon,
+  VideoIcon,
 } from "./Icons";
 
 // socket packets are capped at 25MB on the server, leave room for metadata
@@ -59,6 +63,17 @@ function Chat({ socket, username, room, clientId, onLeave }) {
   const showToast = useCallback((text) => {
     setToast({ text, id: Date.now() });
   }, []);
+
+  const call = useCall({
+    socket,
+    room,
+    onNotice: ({ toast: text, system }) => {
+      if (text) showToast(text);
+      if (system) {
+        setMessages((list) => [...list, { kind: "system", id: makeId(), text: system }]);
+      }
+    },
+  });
 
   useEffect(() => {
     if (!toast) return;
@@ -417,7 +432,25 @@ function Chat({ socket, username, room, clientId, onLeave }) {
                 ))}
             </p>
           </div>
-          <button type="button" className="icon-btn" onClick={copyInvite}
+          {call.callState.active && !call.inCall ? (
+            <button type="button" className="join-call" onClick={() => call.join(call.callState.kind)}>
+              {call.callState.kind === "video" ? <VideoIcon size={16} /> : <PhoneIcon size={16} />}
+              Join call
+              <span>{call.callState.participants.length}</span>
+            </button>
+          ) : (
+            <>
+              <button type="button" className="icon-btn" onClick={() => call.join("audio")}
+                disabled={call.inCall || call.joining} aria-label="Start voice call">
+                <PhoneIcon size={20} />
+              </button>
+              <button type="button" className="icon-btn" onClick={() => call.join("video")}
+                disabled={call.inCall || call.joining} aria-label="Start video call">
+                <VideoIcon size={20} />
+              </button>
+            </>
+          )}
+          <button type="button" className="icon-btn desktop-only" onClick={copyInvite}
             aria-label="Invite people">
             <LinkIcon size={20} />
           </button>
@@ -540,6 +573,18 @@ function Chat({ socket, username, room, clientId, onLeave }) {
             </div>
           </div>
         </div>
+      )}
+
+      {call.inCall && (
+        <CallScreen call={call} selfId={socket.id} username={username} room={room} />
+      )}
+
+      {call.incoming && !call.inCall && (
+        <IncomingCall
+          incoming={call.incoming}
+          onAccept={call.join}
+          onDecline={call.decline}
+        />
       )}
 
       {toast && (
