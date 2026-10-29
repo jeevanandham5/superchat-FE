@@ -1363,6 +1363,13 @@ button.bubble-media {
   animation: toast-in 0.25s ease both;
 }
 
+/* during a call the bottom belongs to the controls */
+.call-screen ~ .toast {
+  top: calc(72px + env(safe-area-inset-top));
+  bottom: auto;
+  text-align: center;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -1617,6 +1624,38 @@ video.mirrored {
 .call-waiting p {
   margin: 0;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.call-hint {
+  align-self: center;
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.14);
+  color: #fcd34d;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.call-tile-status {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.call-tile-status.failed {
+  background: rgba(239, 68, 68, 0.85);
 }
 
 .call-controls {

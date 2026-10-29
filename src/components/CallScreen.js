@@ -83,10 +83,30 @@ function StreamAudio({ stream }) {
   return <audio ref={ref} autoPlay />;
 }
 
-function Tile({ name, label = name, stream, showVideo, muted, screen, mirrored, small }) {
+// phones and mobile data are where calls without a TURN relay tend to fail
+const onMobileNetwork = () =>
+  navigator.connection?.type === "cellular" ||
+  window.matchMedia("(pointer: coarse)").matches;
+
+function Tile({ name, label = name, stream, showVideo, muted, screen, mirrored, small, status }) {
   const speaking = useSpeaking(stream, !muted);
+  // the local tile has no status; remote ones start out with none until ICE moves
+  const statusText = small
+    ? null
+    : status === "failed"
+    ? "Couldn't connect. Try Wi-Fi."
+    : status === "disconnected"
+    ? "Reconnecting…"
+    : !status || status === "new" || status === "connecting"
+    ? "Connecting…"
+    : null;
   return (
     <div className={`call-tile ${speaking ? "speaking" : ""} ${small ? "small" : ""}`}>
+      {statusText && (
+        <div className={`call-tile-status ${status === "failed" ? "failed" : ""}`}>
+          {statusText}
+        </div>
+      )}
       {showVideo && stream ? (
         <StreamVideo stream={stream} mirrored={mirrored} contain={screen} />
       ) : (
@@ -190,6 +210,7 @@ function CallScreen({ call, selfId, username, room }) {
                 showVideo={!p.cameraOff || p.screen}
                 muted={p.muted}
                 screen={p.screen}
+                status={call.peerStatus[p.id]}
               />
             ))}
           </div>
@@ -209,6 +230,12 @@ function CallScreen({ call, selfId, username, room }) {
           </div>
         )}
       </div>
+
+      {!call.relay && onMobileNetwork() && (
+        <p className="call-hint">
+          Calls work best on Wi-Fi. On mobile data they may not connect.
+        </p>
+      )}
 
       <div className="call-controls">
         <button

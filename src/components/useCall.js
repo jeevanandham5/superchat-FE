@@ -18,6 +18,8 @@ const STATIC_ICE_SERVERS = [
 
 const RING_TIMEOUT_MS = 30000;
 const ICE_REFRESH_MS = 60 * 60 * 1000;
+// a blocked network can leave ICE stuck in "new" forever, so give up after this
+const CONNECT_TIMEOUT_MS = 20000;
 
 async function fetchIceServers(baseUrl) {
   const controller = new AbortController();
@@ -26,12 +28,15 @@ async function fetchIceServers(baseUrl) {
     const res = await fetch(`${baseUrl.replace(/\/$/, "")}/ice-servers`, {
       signal: controller.signal,
     });
-    const { iceServers } = await res.json();
+    const { iceServers, relay } = await res.json();
     if (!Array.isArray(iceServers) || !iceServers.length) throw new Error("empty");
-    return [...iceServers, ...STATIC_ICE_SERVERS.slice(1)];
+    return {
+      servers: [...iceServers, ...STATIC_ICE_SERVERS.slice(1)],
+      relay: !!relay || STATIC_ICE_SERVERS.length > 1,
+    };
   } catch {
     // older backend or network hiccup: calls still work on friendly networks
-    return STATIC_ICE_SERVERS;
+    return { servers: STATIC_ICE_SERVERS, relay: STATIC_ICE_SERVERS.length > 1 };
   } finally {
     clearTimeout(timer);
   }
@@ -90,6 +95,10 @@ function useCall({ socket, room, onNotice }) {
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(true);
   const [sharing, setSharing] = useState(false);
+  // without a TURN relay, calls on mobile data often can't connect
+  const [relay, setRelay] = useState(true);
+  const [peerStatus, setPeerStatus] = useState({});
+  const failNoticeRef = useRef(false);
   const [facing, setFacing] = useState("user");
 
   const pcsRef = useRef(new Map());
@@ -132,7 +141,26 @@ function useCall({ socket, room, onNotice }) {
         // a new stream object, so effects keyed on it (level meter) see the track
         setRemoteStreams((s) => ({ ...s, [id]: new MediaStream(remote.getTracks()) }));
       };
+      const markFailed = () => {
+        setPeerStatus((st) => ({ ...st, [id]: "failed" }));
+        if (!failNoticeRef.current) {
+          failNoticeRef.current = true;
+          noticeRef.current?.({
+            toast: "Couldn't connect the call. This network may block calls, try Wi-Fi.",
+          });
+        }
+      };
+      const connectTimer = setTimeout(() => {
+        if (pc.connectionState !== "connected" && pc.connectionState !== "closed") {
+          markFailed();
+        }
+      }, CONNECT_TIMEOUT_MS);
       pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "connected" || pc.connectionState === "closed") {
+          clearTimeout(connectTimer);
+        }
+        if (pc.connectionState === "failed") markFailed();
+        else setPeerStatus((st) => ({ ...st, [id]: pc.connectionState }));
         if (pc.connectionState === "failed" && pc.localDescription?.type === "offer") {
           // the side that offered drives an ICE restart
           pc.createOffer({ iceRestart: true })
@@ -154,8 +182,9 @@ function useCall({ socket, room, onNotice }) {
     if (ice.loadedAt && Date.now() - ice.loadedAt < ICE_REFRESH_MS) {
       return Promise.resolve(ice.servers);
     }
-    ice.pending = fetchIceServers(socket.io.uri).then((servers) => {
+    ice.pending = fetchIceServers(socket.io.uri).then(({ servers, relay: hasRelay }) => {
       iceRef.current = { servers, loadedAt: Date.now(), pending: null };
+      setRelay(hasRelay);
       return servers;
     });
     return ice.pending;
@@ -178,6 +207,11 @@ function useCall({ socket, room, onNotice }) {
     pcsRef.current.get(id)?.close();
     pcsRef.current.delete(id);
     queuedIceRef.current.delete(id);
+    setPeerStatus((st) => {
+      const next = { ...st };
+      delete next[id];
+      return next;
+    });
     setRemoteStreams((s) => {
       const next = { ...s };
       delete next[id];
@@ -197,6 +231,8 @@ function useCall({ socket, room, onNotice }) {
     inCallRef.current = false;
     setLocalStream(null);
     setRemoteStreams({});
+    setPeerStatus({});
+    failNoticeRef.current = false;
     setInCall(false);
     setSharing(false);
     setScreenStream(null);
@@ -490,6 +526,8 @@ function useCall({ socket, room, onNotice }) {
     cameraOff,
     sharing,
     screenStream,
+    relay,
+    peerStatus,
     join,
     hangUp,
     decline,
