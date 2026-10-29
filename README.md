@@ -23,14 +23,13 @@ REACT_APP_SOCKET_URL=http://localhost:3001 npm start
 
 Without `REACT_APP_SOCKET_URL` the app connects to `https://superchat-be.onrender.com`.
 
-### Calls on strict networks
+### Calls on mobile data and strict networks
 
-Calls connect directly between browsers using public STUN servers. Some networks (many mobile carriers, corporate wifi) block direct connections and need a TURN relay. Add one with:
+Calls try a direct connection first. Mobile carriers and strict wifi often block that, so the backend can hand out Cloudflare TURN relay credentials from `GET /ice-servers`:
 
-```bash
-REACT_APP_TURN_URL=turn:your-turn-host:3478,turns:your-turn-host:5349
-REACT_APP_TURN_USERNAME=...
-REACT_APP_TURN_CREDENTIAL=...
-```
+1. In the Cloudflare dashboard, open Realtime → TURN Server and create a TURN key.
+2. In the backend's environment (Render → Environment), set `CF_TURN_KEY_ID` and `CF_TURN_API_TOKEN`.
+
+Without them the backend returns STUN servers only. To use a different TURN provider, set `REACT_APP_TURN_URL`, `REACT_APP_TURN_USERNAME` and `REACT_APP_TURN_CREDENTIAL` on the frontend instead.
 
 The service worker only registers in production builds (`npm run build`).

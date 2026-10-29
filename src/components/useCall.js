@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // STUN finds a direct route; strict networks (many mobile carriers) also need
-// a TURN relay, configured with the REACT_APP_TURN_* variables
-const ICE_SERVERS = [
+// a TURN relay. The backend's /ice-servers hands out short-lived TURN
+// credentials; REACT_APP_TURN_* adds a fixed relay of your own.
+const STATIC_ICE_SERVERS = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
   ...(process.env.REACT_APP_TURN_URL
     ? [
@@ -16,6 +17,25 @@ const ICE_SERVERS = [
 ];
 
 const RING_TIMEOUT_MS = 30000;
+const ICE_REFRESH_MS = 60 * 60 * 1000;
+
+async function fetchIceServers(baseUrl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/ice-servers`, {
+      signal: controller.signal,
+    });
+    const { iceServers } = await res.json();
+    if (!Array.isArray(iceServers) || !iceServers.length) throw new Error("empty");
+    return [...iceServers, ...STATIC_ICE_SERVERS.slice(1)];
+  } catch {
+    // older backend or network hiccup: calls still work on friendly networks
+    return STATIC_ICE_SERVERS;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const VIDEO_CONSTRAINTS = {
   width: { ideal: 1280 },
@@ -81,6 +101,7 @@ function useCall({ socket, room, onNotice }) {
   const inCallRef = useRef(false);
   const callStateRef = useRef({ active: false, participants: [] });
   const [screenStream, setScreenStream] = useState(null);
+  const iceRef = useRef({ servers: STATIC_ICE_SERVERS, loadedAt: 0, pending: null });
   const noticeRef = useRef(onNotice);
   noticeRef.current = onNotice;
 
@@ -100,7 +121,7 @@ function useCall({ socket, room, onNotice }) {
   const createPeer = useCallback(
     (id) => {
       pcsRef.current.get(id)?.close();
-      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      const pc = new RTCPeerConnection({ iceServers: iceRef.current.servers });
       const remote = new MediaStream();
 
       pc.onicecandidate = (e) => {
@@ -126,6 +147,24 @@ function useCall({ socket, room, onNotice }) {
     },
     [sendSignal]
   );
+
+  const loadIceServers = useCallback(() => {
+    const ice = iceRef.current;
+    if (ice.pending) return ice.pending;
+    if (ice.loadedAt && Date.now() - ice.loadedAt < ICE_REFRESH_MS) {
+      return Promise.resolve(ice.servers);
+    }
+    ice.pending = fetchIceServers(socket.io.uri).then((servers) => {
+      iceRef.current = { servers, loadedAt: Date.now(), pending: null };
+      return servers;
+    });
+    return ice.pending;
+  }, [socket]);
+
+  // fetch early so answering a ring isn't slowed down by it
+  useEffect(() => {
+    loadIceServers();
+  }, [loadIceServers]);
 
   const flushIce = async (id, pc) => {
     const queued = queuedIceRef.current.get(id) || [];
@@ -181,6 +220,7 @@ function useCall({ socket, room, onNotice }) {
       setJoining(true);
       setIncoming(null);
       const wantVideo = kind === "video";
+      const iceReady = loadIceServers();
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -195,6 +235,7 @@ function useCall({ socket, room, onNotice }) {
         return;
       }
 
+      await iceReady;
       localRef.current = stream;
       cameraTrackRef.current = stream.getVideoTracks()[0] || null;
       setLocalStream(stream);
@@ -226,7 +267,7 @@ function useCall({ socket, room, onNotice }) {
         }
       });
     },
-    [socket, joining, createPeer, sendSignal, cleanup]
+    [socket, joining, createPeer, sendSignal, cleanup, loadIceServers]
   );
 
   useEffect(() => {
